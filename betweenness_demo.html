@@ -71,6 +71,16 @@ table.tbl td:first-child,table.tbl th:first-child{text-align:left}
 .bct{position:relative;display:inline-block}
 .bct::before{content:"~";position:absolute;left:0;right:0;top:-0.55em;text-align:center;line-height:1}
 .stepper{display:flex;gap:4px;flex-wrap:wrap}
+.seg{display:flex;gap:3px;background:#eeece6;border-radius:8px;padding:3px;margin-bottom:8px;width:max-content}
+.seg button{border:0;background:transparent;padding:4px 10px;border-radius:6px;cursor:pointer;color:var(--muted);font-weight:600;font-size:12px}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.seg button.hint{background:#fff4d6;color:var(--ink);box-shadow:0 0 0 2px var(--bridge) inset}
+.formula{font-size:13px;line-height:1.55;margin:0 0 8px;color:var(--ink)}
+.formula code{font:12px var(--mono)}
+table.tbl td.lb{color:var(--s);font-weight:700} table.tbl td.la{color:var(--path);font-weight:700}
+table.tbl td.li{color:var(--muted)} table.tbl td.lt{color:var(--t);font-weight:700} table.tbl td.lk{color:#6a4c93;font-weight:700}
+table.tbl td.ok{color:var(--ok);font-weight:700} table.tbl td.no{color:var(--bad);font-weight:700}
+table.tbl tr.bnd td{border-bottom:2px dashed var(--t)}
 .stepper span{font-size:12px;padding:3px 8px;border-radius:12px;background:#eeece6;color:var(--muted);cursor:pointer}
 .stepper span.on{background:var(--ink);color:#fff}
 .stepper span.done{background:#d9d6cf;color:var(--ink)}
@@ -83,7 +93,7 @@ table.tbl td:first-child,table.tbl th:first-child{text-align:left}
   <div class="tabs"><button id="tabK" class="on">KADABRA</button><button id="tabB">BRAVA-GNN</button></div>
   <label class="ctl">graph <select id="graphSel"></select></label>
   <span id="kCtl" class="ctl" style="gap:12px">
-    <label class="ctl">&epsilon; <select id="epsSel"><option>0.1</option><option selected>0.05</option><option>0.03</option></select></label>
+    <label class="ctl">&epsilon; <select id="epsSel"><option>0.1</option><option selected>0.05</option><option>0.03</option><option>0.02</option><option>0.01</option><option>0.005</option></select></label>
     <label class="ctl">&delta; <select id="delSel"><option selected>0.1</option><option>0.01</option></select></label>
     <label class="ctl">top-k <select id="kSel"><option value="0" selected>k=0 (all vertices)</option><option>1</option><option>2</option><option>3</option></select></label>
     <label class="ctl">seed <input id="seedIn" type="number" value="7"></label>
@@ -93,6 +103,7 @@ table.tbl td:first-child,table.tbl th:first-child{text-align:left}
     <button class="btn" id="bStep" title="one sample, animated (→ / space)">Step</button>
     <button class="btn primary" id="bPlay" title="P">Play</button>
     <label class="ctl">speed <input id="speed" type="range" min="1" max="5" value="2" style="width:90px"></label>
+    <button class="btn" id="bBurn" title="B">Run burn-in</button>
     <button class="btn" id="bEnd" title="E">Run to stop</button>
     <button class="btn" id="bReset" title="R">Reset</button>
   </span>
@@ -115,9 +126,11 @@ table.tbl td:first-child,table.tbl th:first-child{text-align:left}
       <div class="progress"><div class="burn" id="pgB"></div><div class="main" id="pgM"></div><span class="lbl" id="pgL"></span></div>
     </div>
     <div class="card" style="flex:1;min-height:250px;display:flex;flex-direction:column">
+      <div class="seg" id="kViews"><button data-v="bars" class="on">Intervals</button><button data-v="calib">Calibration: λ, δ</button><button data-v="stop">Stop test: f, g</button></div>
       <h3 id="barsTitle">Estimates <span class="bct">bc</span>(v) with confidence interval [<span class="bct">bc</span>−f, <span class="bct">bc</span>+g]</h3>
       <svg id="bars" style="flex:1;width:100%;min-height:200px"></svg>
-      <div class="legend" style="margin-top:4px">
+      <div id="kTable" class="hidden" style="flex:1;overflow:auto;min-height:200px"></div>
+      <div class="legend" id="barsLegend" style="margin-top:4px">
         <span><i style="background:var(--s);border-radius:2px"></i>estimate <span class="bct">bc</span>(v)</span>
         <span><i style="background:transparent;border:2px solid var(--exact);border-radius:0;width:3px"></i>exact (Brandes); scale: fraction of pairs, ÷ n(n−1)</span>
         <span id="legOk">✓ stopping condition met for v</span>
@@ -163,6 +176,15 @@ const GRAPHS = {
     edges: [[0,1],[1,2],[0,3],[1,3],[1,4],[2,4],[3,4],[3,5],[4,6],[5,7],[6,7],[6,13],
             [7,8],[7,9],[8,10],[8,11],[9,11],[9,12],[10,11],[11,12]],
     focus: 7,
+  },
+  ring: {
+    // low, equal betweenness: the adaptive rule stops before omega for small eps (k = 0)
+    name: "Ring, 24 vertices (stops early)",
+    labels: ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X"],
+    pos: [[500, 50], [570, 59], [635, 84], [691, 125], [734, 177], [761, 239], [770, 305], [761, 371], [734, 432], [691, 485], [635, 526], [570, 551], [500, 560], [430, 551], [365, 526], [309, 485], [266, 433], [239, 371], [230, 305], [239, 239], [266, 177], [309, 125], [365, 84], [430, 59]],
+    edges: [[0, 1], [0, 5], [0, 19], [0, 23], [1, 2], [1, 6], [1, 20], [2, 3], [2, 7], [2, 21], [3, 4], [3, 8], [3, 22], [4, 5], [4, 9], [4, 23], [5, 6], [5, 10], [6, 7], [6, 11], [7, 8], [7, 12], [8, 9], [8, 13], [9, 10], [9, 14], [10, 11], [10, 15], [11, 12], [11, 16], [12, 13], [12, 17], [13, 14], [13, 18], [14, 15], [14, 19], [15, 16], [15, 20], [16, 17], [16, 21], [17, 18], [17, 22], [18, 19], [18, 23], [19, 20], [20, 21], [21, 22], [22, 23]],
+    focus: 0,
+    scale: 0.62,
   },
 };
 
@@ -295,30 +317,39 @@ function computeG(b, it, du, omega) {
 }
 
 // compute_bet_err! with the shipped :paper_bd allocation
+// Also returns where each target came from (display only): "eps", "floor" (gap/2 below eps),
+// "below", "above", "inf" (written off), "vk" (outside the top k, bounded by v_k), "tie".
 function computeBetErr(bet, kT, absolute, eps, startFactor) {
   const U = bet.length, el = new Array(U), eu = new Array(U);
-  if (absolute || U <= kT) { el.fill(eps); eu.fill(eps); return [el, eu]; }
+  const sl = new Array(U), su = new Array(U);
+  if (absolute || U <= kT) { el.fill(eps); eu.fill(eps); sl.fill("eps"); su.fill("eps"); return [el, eu, sl, su]; }
   const B = i => bet[i - 1];                               // 1-based helpers
   const maxErr = Math.sqrt(startFactor) * eps / 4;
+  const tag = (half, name) => (half > eps ? name : "floor");
   el[0] = Math.max(eps, (B(1) - B(2)) / 2); eu[0] = 10;
+  sl[0] = tag((B(1) - B(2)) / 2, "below"); su[0] = "inf";
   for (let i = 2; i <= kT; i++) {
     el[i - 1] = Math.max(eps, (B(i) - B(i + 1)) / 2);
     eu[i - 1] = Math.max(eps, (B(i - 1) - B(i)) / 2);
+    sl[i - 1] = tag((B(i) - B(i + 1)) / 2, "below"); su[i - 1] = tag((B(i - 1) - B(i)) / 2, "above");
   }
   const gapK = (B(kT) - B(kT + 1)) / 2;
-  for (let i = kT + 1; i <= U; i++) { el[i - 1] = 10; eu[i - 1] = Math.max(eps, B(kT) - gapK - B(i)); }
-  const collapse = (i, j) => { el[i - 1] = eu[i - 1] = el[j - 1] = eu[j - 1] = eps; };
+  for (let i = kT + 1; i <= U; i++) {
+    el[i - 1] = 10; eu[i - 1] = Math.max(eps, B(kT) - gapK - B(i));
+    sl[i - 1] = "inf"; su[i - 1] = tag(B(kT) - gapK - B(i), "vk");
+  }
+  const collapse = (i, j) => { el[i - 1] = eu[i - 1] = el[j - 1] = eu[j - 1] = eps; sl[i - 1] = su[i - 1] = sl[j - 1] = su[j - 1] = "tie"; };
   for (let i = 1; i <= kT - 1; i++) if (B(i) - B(i + 1) < maxErr) collapse(i, i + 1);
   if (kT + 1 <= U && B(kT) - B(kT + 1) < maxErr) collapse(kT, kT + 1);
   for (let i = kT + 2; i <= U; i++) if (B(kT + 1) - B(i) < maxErr) collapse(kT + 1, i);
-  return [el, eu];
+  return [el, eu, sl, su];
 }
 
 // compute_delta_guess!  (order: vertices sorted by burn-in count, descending)
 function computeDeltaGuess(counts, order, nPairs, n, kT, absolute, eps, delta, startFactor) {
   const U = order.length, bf = 0.001;
   const bet = order.map(v => counts[v] / nPairs);
-  const [el, eu] = computeBetErr(bet, kT, absolute, eps, startFactor);
+  const [el, eu, sl, su] = computeBetErr(bet, kT, absolute, eps, startFactor);
   let a = 0, b = 1 / (eps * eps) * Math.log(n * 4 * (1 - bf) / delta);
   const term = (c, e, bb) => Math.exp(-c * e * e / bb);
   while (b - a > eps / 10) {
@@ -331,7 +362,7 @@ function computeDeltaGuess(counts, order, nPairs, n, kT, absolute, eps, delta, s
   const dL = new Array(n).fill(term(b, el[U - 1], bet[U - 1]) + floor);
   const dU = new Array(n).fill(term(b, eu[U - 1], bet[U - 1]) + floor);
   for (let i = 0; i < U; i++) { dL[order[i]] = term(b, el[i], bet[i]) + floor; dU[order[i]] = term(b, eu[i], bet[i]) + floor; }
-  return {dL, dU, C: b, lamL: el, lamU: eu};
+  return {dL, dU, C: b, lamL: el, lamU: eu, srcL: sl, srcU: su, bet};
 }
 
 // check_finished; returns per-vertex status too, for the display
@@ -360,10 +391,16 @@ function checkFinished(counts, order, nPairs, k, eps, dL, dU, omega, absolute) {
 
 // Smallest N at which f and g both drop below eps if the estimate and the calibrated deltas stayed
 // as they are now -- a readout for the demo, not part of the algorithm. null beyond `cap`.
+// Binary search: "f, g < eps" only switches from false to true as N grows (checked against the
+// earlier linear scan on 504 cases, identical results), and small eps makes the scan too slow.
 function samplesNeeded(b, tau0, dl, du, omega, eps, cap) {
-  for (let t = Math.max(1, tau0); t <= cap; t++)
-    if (computeF(b, t, dl, omega) < eps && computeG(b, t, du, omega) < eps) return t;
-  return null;
+  const ok = t => computeF(b, t, dl, omega) < eps && computeG(b, t, du, omega) < eps;
+  let lo = Math.max(1, tau0);
+  if (lo > cap || !ok(cap)) return null;
+  if (ok(lo)) return lo;
+  let hi = cap;
+  while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (ok(mid)) hi = mid; else lo = mid; }
+  return hi;
 }
 
 class Kadabra {
@@ -414,6 +451,7 @@ class Kadabra {
     const r = computeDeltaGuess(this.counts, order, this.tau, this.G.n, this.k, this.absolute,
                                 this.eps, this.delta, this.startFactor);
     this.dL = r.dL; this.dU = r.dU; this.C = r.C; this.burnCounts = this.counts.slice();
+    this.calib = {order, bet: r.bet, lamL: r.lamL, lamU: r.lamU, srcL: r.srcL, srcU: r.srcU, C: r.C};
     this.counts.fill(0); this.nPairs = 0; this.phase = "main";
   }
   evaluate() {
@@ -503,7 +541,7 @@ function drawGraph() {
   }
   for (let v = 0; v < G.n; v++) {
     const [x, y] = G.pos[v];
-    const g = el("g", {class: "node", transform: `translate(${x},${y})`, style: "cursor:pointer"}, L.nodes);
+    const g = el("g", {class: "node", transform: `translate(${x},${y}) scale(${G.scale || 1})`, style: "cursor:pointer"}, L.nodes);
     const ring = el("circle", {r: 38, fill: "none", stroke: "none", "stroke-width": 5}, g);
     const body = el("circle", {class: "body", r: 27, fill: "#fff"}, g);
     const lab = el("text", {class: "lab"}, g); lab.textContent = G.labels[v];
@@ -569,6 +607,8 @@ const stageMs = () => SPEEDS[$("speed").value];
 
 function kReset() {
   token++; playing = false; busy = false; updatePlayBtn();
+  $("kViews").querySelector('[data-v="calib"]').classList.remove("hint");
+  if (kView !== "bars") { kView = "bars"; for (const b of $("kViews").children) b.classList.toggle("on", b.dataset.v === "bars"); $("bars").classList.remove("hidden"); $("barsLegend").classList.remove("hidden"); $("kTable").classList.add("hidden"); }
   const eps = +$("epsSel").value, delta = +$("delSel").value, k = +$("kSel").value, seed = +$("seedIn").value | 0;
   K = new Kadabra(G, eps, delta, k, seed);
   resetNodeStyles();
@@ -580,14 +620,89 @@ function kReset() {
     `First a <b>burn-in of N<sub>0</sub> = ${K.tau}</b> samples to calibrate δ<sub>L</sub>, δ<sub>U</sub>. Press <kbd>→</kbd> for one sample.`);
 }
 
+// Burn-in counts are zeroed at calibration (as in the algorithm); until the main phase has drawn
+// its first sample the display keeps showing the discarded burn-in estimates.
+const showingBurnIn = () => K.phase === "burn" || (K.phase === "main" && K.nPairs === 0 && K.burnCounts);
+const shownEstimate = v => (K.phase === "main" && K.nPairs === 0 && K.burnCounts) ? K.burnCounts[v] / K.tau : K.estimate(v);
+
 function kPaintHeat() {
   const mx = Math.max(...exact, 1e-9);
   for (let v = 0; v < G.n; v++) {
-    const b = K.estimate(v);
+    const b = shownEstimate(v);
     L.node[v].body.setAttribute("fill", heat(b / mx));
     L.node[v].lab.style.fill = b / mx > 0.55 ? "#fff" : "#1d1d1f";
-    setBadge(v, K.nPairs ? fmt(b, 2) : null);
+    setBadge(v, (K.nPairs || K.burnCounts) ? fmt(b, 2) : null);
   }
+}
+
+let kView = "bars";
+function setKView(v) {
+  kView = v;
+  for (const b of $("kViews").children) { b.classList.toggle("on", b.dataset.v === v); if (b.dataset.v === v) b.classList.remove("hint"); }
+  $("bars").classList.toggle("hidden", v !== "bars");
+  $("barsLegend").classList.toggle("hidden", v !== "bars");
+  $("kTable").classList.toggle("hidden", v === "bars");
+  if (K) kPanel();
+}
+const sci = x => x === 0 ? "0" : x < 1e-3 ? x.toExponential(1).replace("e-", "e−") : x.toFixed(4);
+const lamCell = (x, src, eps) => {
+  if (src === "inf") return '<td class="li">∞</td>';
+  const cls = {below: "lb", above: "la", tie: "lt", vk: "lk"}[src] || "";
+  return `<td class="${cls}">${x.toFixed(3)}</td>`;
+};
+
+function kCalibTable() {
+  if (!K.calib) {
+    $("barsTitle").innerHTML = 'Calibration: <span class="nt">λ</span> and <span class="nt">δ</span>';
+    $("kTable").innerHTML = `<p class="formula">Available once the burn-in is complete (N<sub>0</sub> = ${K.tau} samples). Press <b>Run burn-in</b>.</p>`;
+    return;
+  }
+  const c = K.calib, n = G.n, eps = K.eps;
+  const sumD = K.dL.reduce((a, x) => a + x, 0) + K.dU.reduce((a, x) => a + x, 0);
+  $("barsTitle").innerHTML = 'Calibration after the burn-in: targets <span class="nt">λ</span>, then the split of <span class="nt">δ</span>';
+  let h = '<p class="formula">';
+  h += K.absolute
+    ? `<b>1 · Targets.</b> k = 0: λ<sub>L</sub> = λ<sub>U</sub> = ε = ${eps} for every vertex.<br>`
+    : `<b>1 · Targets</b> (top-${K.k}, paper): λ<sub>L</sub>(v<sub>i</sub>) = max(ε, <span style="color:var(--s)"><b>gap below</b></span>/2), λ<sub>U</sub>(v<sub>i</sub>) = max(ε, <span style="color:var(--path)"><b>gap above</b></span>/2) inside the top k; outside: λ<sub>L</sub> = ∞, λ<sub>U</sub> <span style="color:#6a4c93"><b>below v<sub>k</sub></b></span>. Pairs closer than ${(Math.sqrt(K.startFactor) / 4).toFixed(1)}ε → all four <span style="color:var(--t)"><b>ε (tie rule)</b></span>.<br>`;
+  h += `<b>2 · Split of δ.</b> δ<sub>L</sub>(v) = e<sup>−C·λ<sub>L</sub>²/<span class="bct">bc</span>(v)</sup> + δ·0.001/(4n), same for δ<sub>U</sub>; bisection gives <b>C = ${c.C.toFixed(0)}</b>, so Σ<sub>v</sub> δ<sub>L</sub> + δ<sub>U</sub> = <b>${sumD.toFixed(4)}</b> ≈ δ/2 = ${(K.delta / 2).toFixed(4)}.<br>`;
+  h += `<b>3 ·</b> The burn-in counts are discarded; f and g below use these δ from now on. Larger λ → smaller δ.</p>`;
+  h += '<table class="tbl" style="font-size:12px"><tr><th>#</th><th>v</th><th>burn-in <span class="bct">bc</span></th><th>gap ↑</th><th>gap ↓</th><th>λ<sub>L</sub></th><th>λ<sub>U</sub></th><th>δ<sub>L</sub></th><th>δ<sub>U</sub></th></tr>';
+  c.order.forEach((v, i) => {
+    const up = i > 0 ? c.bet[i - 1] - c.bet[i] : null, dn = i + 1 < c.order.length ? c.bet[i] - c.bet[i + 1] : null;
+    const bnd = !K.absolute && i === K.k - 1 ? ' class="bnd"' : "";
+    h += `<tr${bnd}><td>${i + 1}</td><td><b>${G.labels[v]}</b></td><td>${c.bet[i].toFixed(3)}</td><td>${up === null ? "–" : up.toFixed(3)}</td><td>${dn === null ? "–" : dn.toFixed(3)}</td>` +
+      lamCell(c.lamL[i], c.srcL[i], eps) + lamCell(c.lamU[i], c.srcU[i], eps) +
+      `<td>${sci(K.dL[v])}</td><td>${sci(K.dU[v])}</td></tr>`;
+  });
+  $("kTable").innerHTML = h + "</table>" + untrackedNote();
+}
+
+// union_sample = min(n, max(2 sqrt(m), k + 20)): only the top vertices by burn-in estimate are tracked
+function untrackedNote() {
+  if (K.U >= G.n) return "";
+  return `<p class="formula" style="margin-top:8px;color:var(--muted)">Only the top <b>${K.U}</b> of ${G.n} vertices by burn-in estimate are tracked (<code>union_sample</code> = max(2√m, k + 20)). The others get the δ of the last tracked vertex (rank ${K.U}) and are not checked by the stop test.</p>`;
+}
+
+function kStopTable() {
+  $("barsTitle").innerHTML = 'Stop test after each sample: bounds <span class="nt">f, g</span> against <span class="nt">ε</span>' + (K.absolute ? "" : " — or separation");
+  if (!K.status) {
+    $("kTable").innerHTML = `<p class="formula">Available in the main phase, after the burn-in. Press <b>Run burn-in</b>, then <b>Step</b> or <b>Run to stop</b>.</p>`;
+    return;
+  }
+  const st = K.status, eps = K.eps;
+  let h = `<p class="formula">N = ${K.nPairs} samples, ω = ${K.omega.toFixed(0)}. f and g come from the current estimate, N, ω and the vertex's δ. ` +
+    (K.absolute ? `Stop when every vertex has f &lt; ε and g &lt; ε (ε = ${eps}).` :
+      `A vertex is done if its interval is separated (inside the top ${K.k}: from its neighbours; outside: below v<sub>k</sub>'s lower bound) or f, g &lt; ε.`) + `</p>`;
+  h += '<table class="tbl"><tr><th>rank</th><th>v</th><th><span class="bct">bc</span></th><th>f</th><th>g</th><th>both &lt; ε</th>' + (K.absolute ? "" : "<th>separated</th>") + '<th>done</th></tr>';
+  st.order.forEach((v, i) => {
+    const tight = st.f[i] < eps && st.g[i] < eps, sep = st.why[i] === "separated";
+    const bnd = !K.absolute && i === K.k - 1 ? ' class="bnd"' : "";
+    h += `<tr${bnd}><td>${i + 1}</td><td><b>${G.labels[v]}</b></td><td>${st.bet[i].toFixed(3)}</td>` +
+      `<td class="${st.f[i] < eps ? "ok" : "no"}">${st.f[i].toFixed(3)}</td><td class="${st.g[i] < eps ? "ok" : "no"}">${st.g[i].toFixed(3)}</td>` +
+      `<td class="${tight ? "ok" : "no"}">${tight ? "✓" : "✗"}</td>` + (K.absolute ? "" : `<td class="${sep ? "ok" : "no"}">${sep ? "✓" : "✗"}</td>`) +
+      `<td class="${st.ok[i] ? "ok" : "no"}">${st.ok[i] ? "✓" : "✗"}</td></tr>`;
+  });
+  $("kTable").innerHTML = h + "</table>" + untrackedNote();
 }
 
 function kPanel() {
@@ -599,7 +714,8 @@ function kPanel() {
   $("pgM").style.width = (100 * (K.phase === "burn" ? 0 : K.nPairs) / W) + "%";
   $("pgM").style.background = K.phase === "done" ? css("--ok") : css("--s");
   $("pgL").textContent = K.phase === "burn" ? `burn-in ${K.nPairs}/${K.tau}` : `N = ${K.nPairs} / ω = ${K.omega.toFixed(0)}`;
-  kBars(); kErrChart();
+  if (kView === "bars") kBars(); else if (kView === "calib") kCalibTable(); else kStopTable();
+  kErrChart();
 }
 
 function kBars() {
@@ -607,7 +723,7 @@ function kBars() {
   const box = s.getBoundingClientRect(); const W = Math.max(box.width, 300), H = Math.max(box.height, 200);
   s.setAttribute("viewBox", `0 0 ${W} ${H}`);
   const topk = !K.absolute;
-  const order = K.status ? K.status.order : [...Array(G.n).keys()].sort((a, b) => (topk ? K.counts[b] - K.counts[a] : 0) || a - b);
+  const order = K.status ? K.status.order : [...Array(G.n).keys()].sort((a, b) => (topk ? shownEstimate(b) - shownEstimate(a) : 0) || a - b);
   const rows = topk ? order : [...Array(G.n).keys()];
   const padL = 34, padR = topk ? 58 : 104, padT = 16, padB = 18;
   const rowH = (H - padT - padB) / G.n;
@@ -624,10 +740,14 @@ function kBars() {
     const y = padT + r * rowH, cy = y + rowH / 2, bh = Math.min(16, rowH * 0.55);
     const lt = el("text", {x: 4, y: cy, "dominant-baseline": "central", "font-size": Math.min(15, rowH * 0.7), "font-weight": 700, fill: hi.includes(v) ? css("--path") : "#1d1d1f"}, s);
     lt.textContent = G.labels[v];
-    const b = K.estimate(v);
-    el("rect", {x: X(0), y: cy - bh / 2, width: Math.max(0, X(b) - X(0)), height: bh, rx: 2, fill: hi.includes(v) ? css("--path") : css("--s"), opacity: 0.85}, s);
+    const b = shownEstimate(v);
+    el("rect", {x: X(0), y: cy - bh / 2, width: Math.max(0, X(b) - X(0)), height: bh, rx: 2, fill: hi.includes(v) ? css("--path") : css("--s"), opacity: showingBurnIn() ? 0.45 : 0.85}, s);
     if (K.status) {
       const i = K.status.order.indexOf(v);
+      if (i < 0) {
+        const m = el("text", {x: W - padR + 8, y: cy, "dominant-baseline": "central", "font-size": 11, fill: "#999"}, s);
+        m.textContent = "untracked";
+      }
       if (i >= 0) {
         const lo = b - K.status.f[i], up = b + K.status.g[i];
         el("line", {x1: X(lo), x2: X(up), y1: cy, y2: cy, stroke: "#333", "stroke-width": 1.5}, s);
@@ -656,6 +776,7 @@ function kBars() {
   $("errTitle").innerHTML = K.absolute ? "Largest error bound max<sub>v</sub> max(f, g) vs. N" : "Vertices whose condition is not yet met vs. N";
   $("barsTitle").innerHTML = K.phase === "burn"
     ? "Burn-in estimates (no intervals yet — thrown away after calibration)"
+    : showingBurnIn() ? "Burn-in estimates, now discarded — the main phase starts at N = 0"
     : topk ? 'Sorted by estimate: intervals must separate ranks, or shrink below <span class="nt">ε</span>' : 'Estimates <span class="bct">bc</span>(v) with confidence interval [<span class="bct">bc</span>−f, <span class="bct">bc</span>+g]';
 }
 
@@ -678,7 +799,9 @@ function kErrChart() {
   const t0 = el("text", {x: padL, y: H - 5, "font-size": 10, fill: "#999"}, s); t0.textContent = "0";
   const t1 = el("text", {x: W - padR, y: H - 5, "font-size": 10, fill: "#999", "text-anchor": "end"}, s); t1.textContent = "ω = " + K.omega.toFixed(0);
   if (K.hist.length > 1) {
-    el("path", {d: K.hist.map(([t, e], i) => (i ? "L" : "M") + X(t).toFixed(1) + "," + Y(e).toFixed(1)).join(""), fill: "none", stroke: css("--s"), "stroke-width": 2}, s);
+    const stride = Math.max(1, Math.floor(K.hist.length / 600));
+    const pts = K.hist.filter((_, i) => i % stride === 0 || i === K.hist.length - 1);
+    el("path", {d: pts.map(([t, e], i) => (i ? "L" : "M") + X(t).toFixed(1) + "," + Y(e).toFixed(1)).join(""), fill: "none", stroke: css("--s"), "stroke-width": 2}, s);
   }
   if (K.phase === "done") {
     const x = X(K.nPairs);
@@ -699,8 +822,11 @@ function kOpenChart(s, W, H, padL, padR, padT, padB) {
   }
   const t0 = el("text", {x: padL, y: H - 5, "font-size": 10, fill: "#999"}, s); t0.textContent = "0";
   const t1 = el("text", {x: W - padR, y: H - 5, "font-size": 10, fill: "#999", "text-anchor": "end"}, s); t1.textContent = "ω = " + K.omega.toFixed(0);
-  if (K.hist.length > 1)
-    el("path", {d: K.hist.map(([t, , c], i) => (i ? "L" : "M") + X(t).toFixed(1) + "," + Y(c).toFixed(1)).join(""), fill: "none", stroke: css("--bad"), "stroke-width": 2}, s);
+  if (K.hist.length > 1) {
+    const stride = Math.max(1, Math.floor(K.hist.length / 600));
+    const pts = K.hist.filter((_, i) => i % stride === 0 || i === K.hist.length - 1);
+    el("path", {d: pts.map(([t, , c], i) => (i ? "L" : "M") + X(t).toFixed(1) + "," + Y(c).toFixed(1)).join(""), fill: "none", stroke: css("--bad"), "stroke-width": 2}, s);
+  }
   if (K.phase === "done") {
     const x = X(K.nPairs);
     el("line", {x1: x, x2: x, y1: padT, y2: H - padB, stroke: css("--ok"), "stroke-width": 2}, s);
@@ -844,9 +970,10 @@ function afterSample(tr, detailed) {
   if (tr.calibrated) {
     playing = false; updatePlayBtn();
     resetNodeStyles(); kPaintHeat(); kPanel();
-    narrate("calibration", `Burn-in done (N<sub>0</sub> = ${K.tau} samples). From these rough estimates a bisection finds C and sets per-vertex ` +
-      `<b>δ<sub>L</sub>(v), δ<sub>U</sub>(v)</b> so that Σ<sub>v</sub> δ<sub>L</sub>(v) + δ<sub>U</sub>(v) ≈ δ/2 (hover a vertex). ` +
-      `The burn-in counts are then <b>discarded</b> and sampling restarts with N = 0.`);
+    if (kView !== "calib") $("kViews").querySelector('[data-v="calib"]').classList.add("hint");
+    narrate("calibration", `Burn-in done (N<sub>0</sub> = ${K.tau} samples). From these rough estimates KADABRA sets the targets <b>λ<sub>L</sub>, λ<sub>U</sub></b>, ` +
+      `then a bisection finds C and splits δ into <b>δ<sub>L</sub>(v), δ<sub>U</sub>(v)</b> so that they add up to δ/2 — see the table. ` +
+      `The burn-in counts are then <b>discarded</b> and sampling restarts with N = 0. Open <b>Calibration: λ, δ</b> for the numbers; then <b>Step</b> or <b>Run to stop</b>.`);
     return false;
   }
   if (K.phase === "done") {
@@ -859,7 +986,8 @@ function afterSample(tr, detailed) {
       : `Reached the worst-case budget N = ω = ${K.omega.toFixed(0)}: the guarantee holds by the fixed-sample bound. ` +
         `On a graph this small ω is already low and the bc(v) are large, so the adaptive test cannot beat it — ` +
         `adaptivity pays off when betweenness values are small, as on large graphs.` +
-        (G.key === "demo" ? ` Try <b>top-k = 1, ε = 0.03</b>: it stops at roughly half of ω.` : ""));
+        (G.key === "demo" ? ` Try <b>top-k = 1, ε = 0.03</b>: it stops at roughly half of ω.` :
+         G.key === "ring" ? ` On this ring every betweenness is only 0.06: try <b>ε = 0.01</b> (stops at about 0.73 ω) or <b>ε = 0.005</b> (about 0.63 ω).` : ""));
     return false;
   }
   return true;
@@ -893,7 +1021,7 @@ async function kPlay() {
       if (!afterSample(tr, true)) break;
       await sleep(stageMs() * 0.5);
     } else {
-      const batch = sp === 4 ? 1 : 8;
+      const batch = sp === 4 ? Math.max(1, Math.ceil(K.omega / 20000)) : Math.max(8, Math.ceil(K.omega / 800));
       let cont = true;
       for (let i = 0; i < batch && cont; i++) {
         const tr = K.step();
@@ -907,11 +1035,27 @@ async function kPlay() {
   playing = false; updatePlayBtn();
 }
 
+async function kRunBurnIn() {
+  if (!K || K.phase !== "burn") return;
+  token++; playing = false; busy = false; updatePlayBtn();
+  const tk = token;
+  let last = null;
+  while (K.phase === "burn" && tk === token) {
+    const perFrame = Math.max(2, Math.ceil(K.tau / 40));
+    for (let i = 0; i < perFrame && K.phase === "burn"; i++) last = K.step();
+    K.lastInternal = last.internal;
+    if (K.phase === "burn") { flashPath(last); kPaintHeat(); kPanel(); narrate("burn-in", `burn-in ${K.nPairs}/${K.tau}: path ${last.path.map(v => G.labels[v]).join(" → ")}`); }
+    await sleep(60);
+  }
+  if (tk === token && last) afterSample(last, true);
+}
+
 async function kRunToEnd() {
   token++; playing = false; busy = false;
   const tk = token;
   while (K.phase !== "done" && tk === token) {
-    for (let i = 0; i < 25 && K.phase !== "done"; i++) {
+    const perFrame = Math.max(25, Math.ceil(K.omega / 400));
+    for (let i = 0; i < perFrame && K.phase !== "done"; i++) {
       const tr = K.step();
       if (tr.calibrated) { K.lastInternal = tr.internal; }
     }
@@ -1167,6 +1311,8 @@ $("tabK").onclick = () => switchTab("K"); $("tabB").onclick = () => switchTab("B
 $("bStep").onclick = () => { if (!playing) kStep(true); };
 $("bPlay").onclick = kPlay;
 $("bEnd").onclick = kRunToEnd;
+$("bBurn").onclick = kRunBurnIn;
+for (const b of $("kViews").children) b.onclick = () => setKView(b.dataset.v);
 $("bReset").onclick = kReset;
 $("bNext").onclick = () => { if (bStage < B_STAGES.length - 1) { bStage++; bRender(); } };
 $("bPrev").onclick = () => { if (bStage > 0) { bStage--; bRender(); } };
@@ -1178,6 +1324,7 @@ addEventListener("keydown", e => {
     if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); if (!playing) kStep(true); }
     else if (e.key === "p" || e.key === "P") kPlay();
     else if (e.key === "e" || e.key === "E") kRunToEnd();
+    else if (e.key === "b" || e.key === "B") kRunBurnIn();
     else if (e.key === "r" || e.key === "R") kReset();
   } else {
     if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); $("bNext").click(); }

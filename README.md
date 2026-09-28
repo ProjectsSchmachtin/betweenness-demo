@@ -6,5 +6,7 @@ shown in the final talk of the lab project
 
 **Live:** https://projectsschmachtin.github.io/betweenness-demo/
 
-The files are a copy of `presentation/presentation_demo/` in that repository; everything runs in the
-browser with no external dependencies.
+This is an extended version of the demo in that repository's `presentation/presentation_demo/`,
+which keeps the version shown in the talk. It adds a burn-in run with calibration and stop-test
+views, smaller error bounds and a larger example graph. Everything runs in the browser with no
+external dependencies.
